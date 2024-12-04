@@ -1,5 +1,5 @@
-from openai import OpenAI
 from fun import *
+from openai import OpenAI
 
 def kimi_ai(msg, ai_api):
     client = OpenAI(
